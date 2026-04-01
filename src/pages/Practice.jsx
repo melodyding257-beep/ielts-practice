@@ -57,10 +57,10 @@ export default function Practice() {
   const handleJump = () => {};
 
   return (
-    <div className="flex flex-col h-screen" style={{ background: '#e8ecf0' }}>
+    <div className="flex flex-col h-screen practice-body">
       {/* Dark navy header */}
       <div className="flex items-center justify-between px-4 flex-shrink-0"
-        style={{ background: 'linear-gradient(to right, #1a2a4a, #1e3a6e)', minHeight: 52 }}>
+        style={{ background: '#0f0f14', minHeight: 52, borderBottom: '1px solid #27272a' }}>
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={handleHome} className="p-1.5 hover:bg-white/10 rounded transition-colors flex-shrink-0">
             <Home size={16} className="text-white" />

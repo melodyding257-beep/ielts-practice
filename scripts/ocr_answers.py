@@ -22,8 +22,7 @@ def extract_answers(pdf_path, q_start=1, q_end=50):
         prefix = os.path.join(tmpdir, 'ans_img')
         subprocess.run(
             ['pdfimages', '-f', '1', '-l', str(max(3, 50)),
-            # Extract from all pages, images only
-            '-png', pdf_path, prefix,
+             '-png', pdf_path, prefix],
             capture_output=True
         )
 

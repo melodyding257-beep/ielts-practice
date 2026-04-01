@@ -1,10 +1,9 @@
 import { useNavigate } from 'react-router-dom';
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Home, RotateCcw, CheckCircle, XCircle, BookOpen, ChevronDown, ChevronUp, FileText } from 'lucide-react';
 import { useExam } from '../context/ExamContext';
 import PassageView from '../components/PassageView';
 import QuestionPanel from '../components/QuestionPanel';
-import { generateVocabReport, generateSentenceReport } from '../utils/reportGenerator';
 
 function getBand(correct, total) {
   if (total === 0) return 'N/A';
@@ -38,8 +37,40 @@ function ScoreRing({ score, total }) {
 
 function VocabReport({ passages }) {
   const [open, setOpen] = useState(false);
-  const words = useMemo(() => generateVocabReport(passages), [passages]);
+  const [words, setWords] = useState([]);
+  const [translations, setTranslations] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const { generateVocabReport } = await import('../utils/reportGenerator');
+        const { translateWord } = await import('../utils/translateApi');
+        const report = await generateVocabReport(passages);
+        if (cancelled) return;
+        setWords(report);
+        // Translate first 10 words in background
+        const newTrans = {};
+        for (let i = 0; i < Math.min(10, report.length); i++) {
+          try {
+            newTrans[report[i].word] = await translateWord(report[i].word);
+          } catch { break; }
+        }
+        if (!cancelled) {
+          setTranslations(newTrans);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [passages]);
+
   if (!words.length) return null;
+
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
       <button onClick={() => setOpen(v => !v)}
@@ -47,7 +78,8 @@ function VocabReport({ passages }) {
         <div className="flex items-center gap-2">
           <FileText size={15} className="text-blue-700" />
           <span className="text-sm font-semibold text-gray-800">重点词汇报告</span>
-          <span className="text-xs text-gray-400">({words.length} 个词)</span>
+          <span className="text-xs text-gray-400">({words.length} 词)</span>
+          {loading && <span className="text-[10px] text-blue-400">翻译中...</span>}
         </div>
         {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
       </button>
@@ -55,9 +87,14 @@ function VocabReport({ passages }) {
         <div className="p-4">
           <div className="flex flex-wrap gap-2">
             {words.map(({ word, count }) => (
-              <div key={word} className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-100 rounded-full">
-                <span className="text-[13px] font-medium text-blue-900">{word}</span>
-                {count > 1 && <span className="text-[10px] text-blue-400 font-bold">×{count}</span>}
+              <div key={word} className="flex flex-col items-start px-2.5 py-1.5 bg-blue-50 border border-blue-100 rounded-lg min-w-[80px]">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[13px] font-bold text-blue-900">{word}</span>
+                  {count > 1 && <span className="text-[10px] text-blue-400 font-bold">×{count}</span>}
+                </div>
+                <div className="text-[11px] text-blue-600 mt-0.5 leading-tight min-h-[14px]">
+                  {translations[word] || (loading ? '' : '—')}
+                </div>
               </div>
             ))}
           </div>
@@ -69,25 +106,63 @@ function VocabReport({ passages }) {
 
 function SentenceReport({ passages }) {
   const [open, setOpen] = useState(false);
-  const sentences = useMemo(() => generateSentenceReport(passages), [passages]);
+  const [sentences, setSentences] = useState([]);
+  const [translations, setTranslations] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const { generateSentenceReport } = await import('../utils/reportGenerator');
+        const { translateText } = await import('../utils/translateApi');
+        const report = await generateSentenceReport(passages);
+        if (cancelled) return;
+        setSentences(report);
+        // Translate first 3 sentences in background
+        const newTrans = {};
+        for (let i = 0; i < Math.min(3, report.length); i++) {
+          try {
+            newTrans[i] = await translateText(report[i].text);
+          } catch { break; }
+        }
+        if (!cancelled) {
+          setTranslations(newTrans);
+          setLoading(false);
+        }
+      } catch {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [passages]);
+
   if (!sentences.length) return null;
+
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
       <button onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors">
         <div className="flex items-center gap-2">
           <FileText size={15} className="text-purple-700" />
-          <span className="text-sm font-semibold text-gray-800">长难句报告</span>
+          <span className="text-sm font-semibold text-gray-800">长难句分析</span>
           <span className="text-xs text-gray-400">({sentences.length} 句)</span>
+          {loading && <span className="text-[10px] text-purple-400">翻译中...</span>}
         </div>
         {open ? <ChevronUp size={15} className="text-gray-400" /> : <ChevronDown size={15} className="text-gray-400" />}
       </button>
       {open && (
-        <div className="p-4 space-y-3">
+        <div className="p-4 space-y-4">
           {sentences.map((s, i) => (
             <div key={i} className="p-3 bg-purple-50 border border-purple-100 rounded-lg">
               <p className="text-[13px] text-gray-800 leading-relaxed font-serif italic">"{s.text}"</p>
-              <p className="text-[11px] text-purple-500 mt-1 font-medium">{s.wordCount} 词</p>
+              <div className="mt-1.5 pt-1.5 border-t border-purple-100">
+                <p className="text-[12px] leading-relaxed text-purple-700">
+                  {translations[i] || (loading ? '翻译中...' : '—')}
+                </p>
+                <p className="text-[11px] text-purple-400 mt-1 font-medium">{s.wordCount} 词</p>
+              </div>
             </div>
           ))}
         </div>
@@ -136,14 +211,14 @@ export default function Results() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4"
-      style={{ background: 'linear-gradient(135deg, #002147 0%, #003B71 50%, #005099 100%)' }}>
-      <div className="bg-white rounded-2xl shadow-2xl p-7 max-w-lg w-full">
+      style={{ background: '#09090b' }}>
+      <div className="bg-[#18181b] rounded-2xl shadow-2xl p-7 max-w-lg w-full border border-[#27272a]">
         {/* Header */}
         <div className="text-center mb-6">
-          <div className="w-11 h-11 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-3">
-            <BookOpen size={22} className="text-[#003B71]" />
+          <div className="w-11 h-11 bg-[#7c3aed]/10 rounded-full flex items-center justify-center mx-auto mb-3">
+            <BookOpen size={22} className="text-[#7c3aed]" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900">测试完成</h2>
+          <h2 className="text-xl font-bold text-white">测试完成</h2>
           <p className="text-gray-400 text-xs mt-1 truncate max-w-xs mx-auto">{fileName}</p>
         </div>
 
@@ -153,9 +228,9 @@ export default function Results() {
             <ScoreRing score={score} total={total} />
           ) : (
             <div className="text-center py-4">
-              <div className="text-5xl font-bold text-[#003B71]">{answeredCount}</div>
-              <div className="text-gray-500 text-sm mt-1">题已作答 / 共 {allQ.length} 题</div>
-              <p className="text-xs text-gray-400 mt-2 max-w-xs">此文章无标准答案，已保存你的作答记录</p>
+              <div className="text-5xl font-bold text-[#7c3aed]">{answeredCount}</div>
+              <div className="text-[#71717a] text-sm mt-1">题已作答 / 共 {allQ.length} 题</div>
+              <p className="text-xs text-[#52525b] mt-2 max-w-xs">此文章无标准答案，已保存你的作答记录</p>
             </div>
           )}
         </div>
@@ -175,10 +250,10 @@ export default function Results() {
           return (
             <div className={`grid gap-3 mb-5 ${hasAnswerKey ? 'grid-cols-3' : 'grid-cols-2'}`}>
               {stats.map(({ label, value, Ic, color }) => (
-                <div key={label} className="bg-gray-50 rounded-xl p-3 text-center">
+                <div key={label} className="bg-[#27272a] rounded-xl p-3 text-center border border-[#3f3f46]">
                   <Ic size={16} className={`${color} mx-auto mb-1`} />
-                  <div className="text-xl font-bold text-gray-900">{value}</div>
-                  <div className="text-xs text-gray-400">{label}</div>
+                  <div className="text-xl font-bold text-white">{value}</div>
+                  <div className="text-xs text-[#71717a]">{label}</div>
                 </div>
               ))}
             </div>
@@ -187,11 +262,11 @@ export default function Results() {
 
         {/* Wrong answers */}
         {hasAnswerKey && wrong.length > 0 && (
-          <div className="mb-4 p-3 bg-red-50 rounded-xl border border-red-100">
-            <p className="text-xs font-bold text-red-700 mb-2 uppercase tracking-wide">需要复习的题目</p>
+          <div className="mb-4 p-3 bg-[#27272a] rounded-xl border border-[#3f3f46]">
+            <p className="text-xs font-bold text-[#f87171] mb-2 uppercase tracking-wide">需要复习的题目</p>
             <div className="flex flex-wrap gap-1.5">
               {wrong.map(w => (
-                <span key={w.number} className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded font-mono font-bold">
+                <span key={w.number} className="text-xs bg-[#3f3f46] text-[#f87171] px-2 py-0.5 rounded font-mono font-bold">
                   Q{w.number}
                 </span>
               ))}
@@ -208,16 +283,16 @@ export default function Results() {
         {/* Actions */}
         <div className="space-y-2">
           <button onClick={() => setShowReview(true)}
-            className="w-full bg-[#003B71] hover:bg-[#002147] text-white font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
+            className="w-full bg-[#7c3aed] hover:bg-[#6d28d9] text-white font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-2 text-sm">
             <BookOpen size={15} /> 查看答案与解析
           </button>
           <div className="grid grid-cols-2 gap-2">
             <button onClick={handleRetry}
-              className="py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5">
+              className="py-2.5 border border-[#3f3f46] rounded-xl text-sm font-medium text-[#a1a1aa] hover:bg-[#27272a] flex items-center justify-center gap-1.5">
               <RotateCcw size={13} /> 重新练习
             </button>
             <button onClick={handleHome}
-              className="py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5">
+              className="py-2.5 border border-[#3f3f46] rounded-xl text-sm font-medium text-[#a1a1aa] hover:bg-[#27272a] flex items-center justify-center gap-1.5">
               <Home size={13} /> 上传新文件
             </button>
           </div>

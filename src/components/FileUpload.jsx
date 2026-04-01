@@ -54,7 +54,7 @@ export default function FileUpload({ onParsed }) {
       // Attach OCR metadata so Home can show confirmation UI
       parsed._ocrPerformed = ocrPerformed;
       parsed._ocrAnswers = ocrAnswers || {};
-      onParsed(parsed, file.name);
+      onParsed(parsed, file.name, file);
     } catch (e) {
       setError(e.message || 'Failed to process file.');
       setSelectedFile(null);
@@ -95,7 +95,7 @@ export default function FileUpload({ onParsed }) {
         {loading ? (
           <div className="flex flex-col items-center gap-3">
             <Loader size={40} className="text-blue-600 animate-spin" />
-            <p className="text-sm font-medium text-gray-700">
+            <p className="text-sm font-medium text-[#a1a1aa]">
               {progress > 0 ? `OCR in progress: ${progress}%` : 'Extracting and parsing...'}
             </p>
             {progress > 0 && (
@@ -106,12 +106,12 @@ export default function FileUpload({ onParsed }) {
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3">
-            <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center">
-              <Upload size={28} className="text-blue-600" />
+            <div className="w-16 h-16 rounded-full bg-[#27272a] flex items-center justify-center">
+              <Upload size={28} className="text-[#7c3aed]" />
             </div>
             <div>
-              <p className="font-semibold text-gray-800">Drop your file here</p>
-              <p className="text-sm text-gray-500 mt-1">or click to browse</p>
+              <p className="font-semibold text-white">Drop your file here</p>
+              <p className="text-sm text-[#71717a] mt-1">or click to browse</p>
             </div>
             <div className="flex gap-2 flex-wrap justify-center mt-1">
               {['PDF', 'DOCX', 'JPG', 'PNG'].map(f => (
