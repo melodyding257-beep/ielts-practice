@@ -8,6 +8,32 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 
 const PARA_GAP = 14; // pts — Y gap larger than this = new paragraph
 
+// ─── Render PDF page(s) to image data URLs for OCR ────────────────────────────
+// Renders the last `count` pages at high resolution (scale=2 ≈ 144 DPI)
+
+export async function renderPDFPagesToImages(file, pageIndices) {
+  // pageIndices is 0-based
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const scale = 2.5; // ~180 DPI
+  const images = [];
+
+  for (const idx of pageIndices) {
+    const pageNum = idx + 1;
+    if (pageNum < 1 || pageNum > pdf.numPages) continue;
+    const page = await pdf.getPage(pageNum);
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.floor(viewport.width);
+    canvas.height = Math.floor(viewport.height);
+    const ctx = canvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    images.push(canvas.toDataURL('image/png'));
+  }
+
+  return images; // array of data URL strings
+}
+
 export async function extractTextFromPDF(file) {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;

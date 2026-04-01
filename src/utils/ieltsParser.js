@@ -204,10 +204,20 @@ function findPassageEnd(text) {
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
-export function parseIELTSText(rawText) {
+export function parseIELTSText(rawText, ocrAnswers) {
   const text = clean(rawText);
   const answerKey = extractAnswerKey(text);
-  const hasAnswerKey = Object.keys(answerKey).length > 0;
+  // Merge OCR answers (OCR takes priority — it reads image-based answer pages)
+  const mergedAnswers = { ...answerKey };
+  if (ocrAnswers) {
+    for (const [num, ans] of Object.entries(ocrAnswers)) {
+      const key = parseInt(num);
+      if (!mergedAnswers[key]) {
+        mergedAnswers[key] = ans;
+      }
+    }
+  }
+  const hasAnswerKey = Object.keys(mergedAnswers).length > 0;
 
   // Split passage block from question block
   const passageEnd = findPassageEnd(text);
@@ -231,24 +241,25 @@ export function parseIELTSText(rawText) {
     passages.push(parsePassage(passageBlock, 1));
   }
 
-  const questionSets = parseQuestionSets(questionBlock || text, answerKey);
+  const questionSets = parseQuestionSets(questionBlock || text, mergedAnswers);
   const totalQuestions = questionSets.reduce((s, qs) => s + qs.questions.length, 0);
   const hasQuestions = totalQuestions > 0;
 
-  return { passages, questionSets, totalQuestions, hasAnswerKey, hasQuestions, rawText: text };
+  return { passages, questionSets, totalQuestions, hasAnswerKey, hasQuestions, rawText: text, detectedAnswers: mergedAnswers };
 }
 
 export async function extractText(file, onProgress) {
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext === 'pdf') {
     const { extractTextFromPDF } = await import('./pdfParser.js');
-    return extractTextFromPDF(file);
+    const text = await extractTextFromPDF(file);
+    return { text, file }; // file passed through for OCR step
   } else if (ext === 'docx' || ext === 'doc') {
     const { extractTextFromDocx } = await import('./docxParser.js');
-    return extractTextFromDocx(file);
+    return { text: await extractTextFromDocx(file) };
   } else if (['jpg', 'jpeg', 'png', 'bmp', 'tiff', 'webp'].includes(ext)) {
     const { extractTextFromImage } = await import('./imageParser.js');
-    return extractTextFromImage(file, onProgress);
+    return { text: await extractTextFromImage(file, onProgress) };
   } else {
     throw new Error(`不支持的文件格式：.${ext}`);
   }

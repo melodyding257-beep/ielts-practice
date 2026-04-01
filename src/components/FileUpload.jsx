@@ -26,11 +26,34 @@ export default function FileUpload({ onParsed }) {
     setLoading(true);
     setProgress(0);
     try {
-      const text = await extractText(file, p => setProgress(p));
+      const ext = file.name.split('.').pop().toLowerCase();
+      const result = await extractText(file, p => setProgress(p));
+      const text = result.text;
+
       if (!text || text.trim().length < 50) {
         throw new Error('Could not extract enough text from this file. Try a different file or format.');
       }
-      const parsed = parseIELTSText(text);
+
+      let ocrAnswers = null;
+      let ocrPerformed = false;
+
+      // For PDFs, attempt OCR on answer pages to find image-embedded answers
+      if (ext === 'pdf' && result.file) {
+        try {
+          setProgress(90);
+          const { extractAnswersFromPDF } = await import('../utils/ocrPdfAnswers.js');
+          ocrAnswers = await extractAnswersFromPDF(result.file, 27, 40, p => setProgress(p));
+          ocrPerformed = true;
+        } catch (e) {
+          // OCR failed — continue without answers
+          console.warn('OCR answer extraction failed:', e);
+        }
+      }
+
+      const parsed = parseIELTSText(text, ocrAnswers);
+      // Attach OCR metadata so Home can show confirmation UI
+      parsed._ocrPerformed = ocrPerformed;
+      parsed._ocrAnswers = ocrAnswers || {};
       onParsed(parsed, file.name);
     } catch (e) {
       setError(e.message || 'Failed to process file.');
