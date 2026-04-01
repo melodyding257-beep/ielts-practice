@@ -7,6 +7,7 @@ function clean(text) {
   return text
     .replace(/\r\n/g, '\n').replace(/\r/g, '\n')
     .replace(/[ \t]+/g, ' ')
+    .replace(/---PAGE---/g, '')
     .replace(/\n{3,}/g, '\n\n')
     .replace(/R E A D I N G PA S S A G E/g, 'READING PASSAGE')
     .trim();

@@ -1,11 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Georgia:ital,wght@0,400;0,600;1,400&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 * { box-sizing: border-box; }
-body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: #f0f2f5; color: #1a1a1a; }
+body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: #e8ecf0; color: #1a1a1a; }
 #root { width: 100%; min-height: 100vh; }
 
 ::-webkit-scrollbar { width: 5px; }
@@ -13,36 +13,64 @@ body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: #f0f2
 ::-webkit-scrollbar-thumb { background: #c1c4cc; border-radius: 10px; }
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
-/* Passage typography */
+/* ── Passage typography ──────────────────────────────────────────────────── */
+.passage-body { max-width: 700px; }
+.passage-scroll { line-height: 1.85; }
 .passage-text {
   font-family: Georgia, 'Times New Roman', serif;
   font-size: 14.5px;
-  line-height: 1.88;
   color: #1a1a1a;
   font-weight: 400;
+  line-height: 1.88;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
-.passage-body { max-width: 680px; }
 .para-label {
-  display: inline-block;
   font-family: Georgia, serif;
   font-weight: bold;
   font-size: 14.5px;
   color: #1a1a1a;
-  margin-right: 0.6rem;
-  min-width: 1.2rem;
+  margin-right: 0.5rem;
+  min-width: 1.1rem;
+  display: inline;
 }
+.highlighted-text { cursor: pointer; }
+.highlighted-text:hover { filter: brightness(0.92); }
 
-/* Question items */
+/* ── Floating highlight/note menu ────────────────────────────────────────── */
+.highlight-menu {
+  position: absolute;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+  z-index: 200;
+  min-width: 260px;
+  max-width: 340px;
+}
+.ielts-highlight-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 9px;
+  border-radius: 6px; border: 1px solid #e5e7eb;
+  background: #fff; color: #374151;
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  transition: all 0.12s; white-space: nowrap;
+}
+.ielts-highlight-btn:hover { background: #f0f6ff; border-color: #93b4d8; color: #1e40af; }
+
+/* ── Question items ─────────────────────────────────────────────────────── */
 .ielts-question-item {
-  padding: 12px 14px; border-radius: 6px; margin-bottom: 6px;
+  padding: 11px 13px; border-radius: 6px; margin-bottom: 6px;
   border: 1.5px solid #e5e7eb; background: #fff;
   cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
 }
 .ielts-question-item:hover { border-color: #93b4d8; }
-.ielts-question-item.answered { border-color: #6ea8d6; background: #f0f6ff; }
-.ielts-question-item.current { border-color: #003B71; box-shadow: 0 0 0 3px rgba(0,59,113,0.10); }
+.ielts-question-item.current { border-color: #003B71; box-shadow: 0 0 0 3px rgba(0,59,113,0.10); background: #fafcff; }
 
-/* Question number badge */
+.q-text { word-wrap: break-word; overflow-wrap: break-word; white-space: pre-wrap; }
+
+/* ── Question number badge ──────────────────────────────────────────────── */
 .q-num-badge {
   display: inline-flex; align-items: center; justify-content: center;
   width: 26px; height: 26px; border-radius: 50%;
@@ -51,19 +79,19 @@ body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: #f0f2
 .q-num-empty { background: #f3f4f6; color: #6b7280; border: 1.5px solid #d1d5db; }
 .q-num-answered { background: #003B71; color: #fff; border: 1.5px solid #003B71; }
 
-/* Question nav buttons */
+/* ── Question nav buttons ───────────────────────────────────────────────── */
 .q-nav-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 30px; height: 30px; border-radius: 5px;
   font-size: 12px; font-weight: 600;
   border: 1.5px solid #d1d5db; background: #fff; color: #4b5563;
-  cursor: pointer; transition: all 0.12s;
+  cursor: pointer; transition: all 0.12s; position: relative;
 }
 .q-nav-btn:hover { border-color: #003B71; color: #003B71; }
 .q-nav-btn.q-nav-answered { background: #003B71; color: #fff; border-color: #003B71; }
 .q-nav-btn.q-nav-current { background: #2563eb; color: #fff; border-color: #2563eb; }
 
-/* Option buttons */
+/* ── Option buttons ─────────────────────────────────────────────────────── */
 .ielts-option {
   display: flex; align-items: flex-start; gap: 10px;
   width: 100%; padding: 9px 12px;
@@ -88,32 +116,17 @@ body { margin: 0; font-family: 'Inter', system-ui, sans-serif; background: #f0f2
 .option-circle-correct { background: #16a34a; border-color: #16a34a; color: #fff; }
 .option-circle-wrong { background: #dc2626; border-color: #dc2626; color: #fff; }
 
-/* Selection tooltip */
-.selection-tooltip {
-  position: absolute; background: #fff;
-  border: 1px solid #e5e7eb; border-radius: 8px;
-  padding: 10px 12px;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-  z-index: 100; min-width: 180px; max-width: 320px;
-}
-
-/* Upload area */
-.upload-area {
-  border: 2px dashed #c9d8ea; border-radius: 12px;
-  transition: all 0.2s; cursor: pointer;
-}
+/* ── Upload area ──────────────────────────────────────────────────────── */
+.upload-area { border: 2px dashed #c9d8ea; border-radius: 12px; transition: all 0.2s; cursor: pointer; }
 .upload-area:hover, .upload-area.dragging { border-color: #003B71; background: #eef3fb; }
 
-/* Timer */
+/* ── Timer ─────────────────────────────────────────────────────────────── */
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 .timer-warning { animation: blink 1s ease-in-out infinite; }
 
-/* Banners */
-.reading-mode-banner {
-  background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px;
-  padding: 12px 16px; display: flex; align-items: flex-start; gap: 10px;
-}
-.no-answer-banner {
-  background: #f0f9ff; border: 1px solid #7dd3fc; border-radius: 8px;
-  padding: 12px 16px; display: flex; align-items: flex-start; gap: 10px;
-}
+/* ── Banners ─────────────────────────────────────────────────────────── */
+.reading-mode-banner { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 12px 16px; display: flex; align-items: flex-start; gap: 10px; }
+.no-answer-banner { background: #f0f9ff; border: 1px solid #7dd3fc; border-radius: 8px; padding: 12px 16px; display: flex; align-items: flex-start; gap: 10px; }
+
+/* ── Selection tooltip ─────────────────────────────────────────────────── */
+.selection-tooltip { position: absolute; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); z-index: 100; min-width: 180px; max-width: 320px; }
