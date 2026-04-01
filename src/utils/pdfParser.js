@@ -1,27 +1,73 @@
-// PDF text extraction using PDF.js
+// PDF text extraction using PDF.js — layout-preserving line reconstruction
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Use local worker to avoid CDN issues
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
   import.meta.url
 ).toString();
 
+const PARA_GAP = 14; // pts — Y gap larger than this = new paragraph
+
 export async function extractTextFromPDF(file) {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  let fullText = '';
+  const pages = [];
 
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map(item => item.str)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    fullText += pageText + '\n\n';
+    const { items } = await page.getTextContent();
+
+    // Group items by Y → one line
+    const lineMap = new Map();
+    for (const item of items) {
+      if (item.str == null) continue;
+      const y = Math.round(item.transform[5]);
+      if (!lineMap.has(y)) lineMap.set(y, []);
+      lineMap.get(y).push(item);
+    }
+
+    const sortedYs = [...lineMap.keys()].sort((a, b) => b - a);
+    const lines = [];
+
+    for (const y of sortedYs) {
+      // Sort left → right
+      const lineItems = lineMap.get(y).sort((a, b) => a.transform[4] - b.transform[4]);
+
+      // Filter out pure-space items — they'll be handled via gap logic
+      const textItems = lineItems.filter(it => it.str !== ' ');
+
+      let lineText = '';
+      for (let j = 0; j < textItems.length; j++) {
+        const item = textItems[j];
+
+        if (j > 0) {
+          // Find the previous text item (could be j-1 or earlier if spaces were skipped)
+          let prevTextIdx = j - 1;
+          // Actually, since we filtered, textItems is contiguous non-space
+          // So prev item is at j-1 in textItems
+          const prev = textItems[j - 1];
+          const prevEnd = prev.transform[4] + (prev.width || 0);
+          const gap = item.transform[4] - prevEnd;
+          // Add one space when there is any positive gap between the two words
+          if (gap > 0) lineText += ' ';
+        }
+        lineText += item.str;
+      }
+
+      lines.push({ y, text: lineText.trimEnd() });
+    }
+
+    // Reconstruct page — blank line = paragraph break
+    const pageTextLines = [];
+    for (let li = 0; li < lines.length; li++) {
+      const { y, text } = lines[li];
+      const prevY = li > 0 ? lines[li - 1].y : y + PARA_GAP + 1;
+      if (prevY - y > PARA_GAP && li > 0) pageTextLines.push('');
+      pageTextLines.push(text);
+    }
+
+    pages.push(pageTextLines.join('\n'));
   }
 
-  return fullText;
+  return pages.join('\n\n---PAGE---\n\n');
 }

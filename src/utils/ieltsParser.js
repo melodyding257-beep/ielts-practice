@@ -1,7 +1,6 @@
 /**
- * IELTS Reading Paper Parser — v2
- * Correctly handles real Cambridge IELTS papers with paragraph labels,
- * numbered questions (not necessarily starting at 1), answer keys, etc.
+ * IELTS Reading Paper Parser — v4
+ * Robust against real IELTS PDF layouts.
  */
 
 function clean(text) {
@@ -13,6 +12,8 @@ function clean(text) {
     .trim();
 }
 
+// ─── Passage parsing ─────────────────────────────────────────────────────────
+
 function parsePassage(block, number) {
   const lines = block.split('\n');
   let title = '';
@@ -20,33 +21,33 @@ function parsePassage(block, number) {
   const paragraphs = [];
   let currentLabel = null;
   let currentText = '';
-  let titleFound = false;
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
     if (!line) continue;
-    if (/READING PASSAGE\s*\d*/i.test(line)) continue;
-    if (/you should spend/i.test(line)) continue;
-    if (/which are based on/i.test(line)) continue;
+    if (/^READING PASSAGE\s*\d*/i.test(line)) continue;
+    if (/^you should spend/i.test(line)) continue;
+    if (/^which are based on/i.test(line)) continue;
 
-    const labelMatch = line.match(/^([A-F])\s{1,6}(.+)/);
+    // Paragraph label: single letter A-Z at start, followed by text (any amount of whitespace)
+    // The label itself may be followed by 1 or more spaces/tabs
+    const labelMatch = line.match(/^([A-Z])\s+(.+)/);
     if (labelMatch) {
-      if (currentLabel !== null) {
+      if (currentLabel !== null && currentText.trim()) {
         paragraphs.push({ label: currentLabel, text: currentText.trim() });
       }
       currentLabel = labelMatch[1];
       currentText = labelMatch[2];
-      titleFound = true;
       continue;
     }
 
     if (currentLabel !== null) {
       currentText += ' ' + line;
-      continue;
+    } else if (!title) {
+      title = line;
+    } else if (!subtitle) {
+      subtitle = line;
     }
-
-    if (!title) { title = line; continue; }
-    if (!subtitle && !titleFound) { subtitle = line; continue; }
   }
 
   if (currentLabel !== null && currentText.trim()) {
@@ -54,62 +55,56 @@ function parsePassage(block, number) {
   }
 
   if (paragraphs.length === 0) {
+    // Fallback: split by double newlines
     const chunks = block.split(/\n\n+/).filter(c => c.trim().length > 40);
     chunks.forEach((chunk, idx) => {
-      if (idx === 0 && !title) { title = chunk.trim().substring(0, 80); return; }
-      paragraphs.push({ label: String.fromCharCode(65 + idx - 1), text: chunk.trim() });
+      const trimmed = chunk.trim();
+      if (!title && idx === 0) { title = trimmed.substring(0, 80); return; }
+      paragraphs.push({ label: String.fromCharCode(65 + paragraphs.length), text: trimmed });
     });
   }
 
-  return {
-    number,
-    title: title.trim(),
-    subtitle: subtitle.trim(),
-    paragraphs,
-    fullText: paragraphs.map(p => p.text).join('\n\n'),
-  };
+  return { number, title: title.trim(), subtitle: subtitle.trim(), paragraphs,
+           fullText: paragraphs.map(p => p.text).join('\n\n') };
 }
+
+// ─── Answer key ─────────────────────────────────────────────────────────────
 
 function extractAnswerKey(text) {
   const key = {};
-  const densePattern = /\b(\d{1,2})[.:)]\s*([A-Z][A-Z\s]*?)(?=\s+\d{1,2}[.:)]|\s*$)/gm;
+  const dense = /\b(\d{1,2})[.:)]\s*([A-Z][A-Z\s]*?)(?=\s+\d{1,2}[.:)]|\s*$)/gm;
   let m;
-  while ((m = densePattern.exec(text)) !== null) {
+  while ((m = dense.exec(text)) !== null) {
     const num = parseInt(m[1]);
     const ans = m[2].trim();
     if (num >= 1 && num <= 50 && ans.length <= 30) key[num] = ans;
   }
-  const answerSection = text.match(/answers?:?\s*\n([\s\S]{10,300})/i);
-  if (answerSection) {
-    const body = answerSection[1];
-    const pairs = body.matchAll(/(\d{1,2})[.:)\s]\s*([A-Za-z][^\n\d]{0,40})/g);
-    for (const pair of pairs) {
-      const num = parseInt(pair[1]);
-      const ans = pair[2].trim();
-      if (num >= 1 && num <= 50) key[num] = ans;
-    }
-  }
   return key;
 }
 
-function detectType(instruction) {
-  const t = instruction.toLowerCase();
-  if (t.includes('which paragraph') || (t.includes('paragraph') && t.includes('letter') && t.includes('a') && t.includes('f'))) return 'MATCHING_PARAGRAPHS';
+// ─── Question type ───────────────────────────────────────────────────────────
+
+function detectType(instr) {
+  const t = instr.toLowerCase();
+  if (t.includes('paragraph') && t.includes('letter') && (t.includes('a') || t.includes('a–f'))) return 'MATCHING_PARAGRAPHS';
   if (t.includes('true') && t.includes('false') && t.includes('not given')) return 'TRUE_FALSE_NOT_GIVEN';
   if (t.includes('yes') && t.includes('no') && t.includes('not given')) return 'YES_NO_NOT_GIVEN';
   if (t.includes('choose') && t.includes('letter')) return 'MULTIPLE_CHOICE';
   if (t.includes('match') && !t.includes('paragraph')) return 'MATCHING';
   if (t.includes('heading')) return 'MATCHING_HEADINGS';
   if (t.includes('summary') || t.includes('notes') || t.includes('table') || t.includes('flow')) return 'SUMMARY_COMPLETION';
-  if (t.includes('no more than') || t.includes('answer the question')) return 'SHORT_ANSWER';
+  if (t.includes('no more than')) return 'SHORT_ANSWER';
   if (t.includes('complet') || t.includes('fill')) return 'SENTENCE_COMPLETION';
   return 'SHORT_ANSWER';
 }
 
+// ─── Parse questions ────────────────────────────────────────────────────────
+
 function parseQuestions(block, type, answerKey) {
   const questions = [];
   const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
-  const qRe = /^(\d{1,2})[.)]\s*(.+)|^(\d{1,2})\s{1,4}(.+)/;
+  // "27 text" or "27. text" or "27) text" — number may have optional separator
+  const qRe = /^(\d{1,2})(?:[.)])?\s+(.+)/;
   let currentQ = null;
   let currentOpts = [];
 
@@ -118,12 +113,11 @@ function parseQuestions(block, type, answerKey) {
     const q = { number: currentQ.num, text: currentQ.text.trim(), type };
     if (type === 'TRUE_FALSE_NOT_GIVEN') q.options = ['TRUE', 'FALSE', 'NOT GIVEN'];
     else if (type === 'YES_NO_NOT_GIVEN') q.options = ['YES', 'NO', 'NOT GIVEN'];
-    else if (type === 'MATCHING_PARAGRAPHS') q.options = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
+    else if (type === 'MATCHING_PARAGRAPHS') q.options = ['A','B','C','D','E','F','G'];
     else if (type === 'MULTIPLE_CHOICE' && currentOpts.length > 0) q.options = [...currentOpts];
     if (answerKey[currentQ.num]) q.answer = answerKey[currentQ.num];
     questions.push(q);
-    currentOpts = [];
-    currentQ = null;
+    currentOpts = []; currentQ = null;
   };
 
   for (const line of lines) {
@@ -133,19 +127,14 @@ function parseQuestions(block, type, answerKey) {
 
     const qMatch = line.match(qRe);
     if (qMatch) {
-      const num = parseInt(qMatch[1] || qMatch[3]);
-      const text = (qMatch[2] || qMatch[4] || '').trim();
-      if (num >= 1 && num <= 100 && text.length > 2) {
-        save();
-        currentQ = { num, text };
-        continue;
-      }
+      const num = parseInt(qMatch[1]);
+      const text = qMatch[2].trim();
+      if (num >= 1 && num <= 100 && text.length > 2) { save(); currentQ = { num, text }; continue; }
     }
 
     const optMatch = line.match(/^([A-H])[.)]\s*(.+)/);
     if (optMatch && currentQ && (type === 'MULTIPLE_CHOICE' || type === 'MATCHING_HEADINGS')) {
-      currentOpts.push({ label: optMatch[1], text: optMatch[2].trim() });
-      continue;
+      currentOpts.push({ label: optMatch[1], text: optMatch[2].trim() }); continue;
     }
 
     if (currentQ) currentQ.text += ' ' + line;
@@ -153,6 +142,8 @@ function parseQuestions(block, type, answerKey) {
   save();
   return questions;
 }
+
+// ─── Parse question sets ────────────────────────────────────────────────────
 
 function parseQuestionSets(text, answerKey) {
   const sets = [];
@@ -168,57 +159,78 @@ function parseQuestionSets(text, answerKey) {
     const blockEnd = i + 1 < matches.length ? matches[i + 1].index : text.length;
     const block = text.slice(blockStart, blockEnd);
 
+    // Instruction lines: lines between header and first question number
     const blockLines = block.split('\n').map(l => l.trim()).filter(Boolean);
     const instrLines = [];
     let qi = 1;
     while (qi < blockLines.length) {
       const l = blockLines[qi];
-      if (/^(\d{1,2})[.)]\s/.test(l) || /^(\d{1,2})\s{1,4}\S/.test(l)) break;
+      if (/^\d{1,2}(?:[.)])?\s/.test(l)) break;
       if (!/^(TRUE|FALSE|NOT GIVEN|YES|NO)$/i.test(l)) instrLines.push(l);
       qi++;
     }
+
     const instruction = instrLines.join(' ').trim();
-    const type = detectType(instruction);
-    const questions = parseQuestions(block, type, answerKey);
+    const questions = parseQuestions(block, detectType(instruction), answerKey);
     if (questions.length > 0) {
-      sets.push({ questionRange: `${start}–${end}`, start, end, type, instruction, questions });
+      sets.push({ questionRange: `${start}–${end}`, start, end,
+                  type: detectType(instruction), instruction, questions });
     }
   }
   return sets;
 }
+
+// ─── Find where passage ends (skip header "Questions X-Y" mentions) ─────────
+
+function findPassageEnd(text) {
+  // Find all "Questions X-Y" occurrences
+  const qRe = /Questions?\s+(\d{1,2})\s*[–\-—]\s*(\d{1,2})/gi;
+  const matches = [...text.matchAll(qRe)];
+
+  for (const m of matches) {
+    // Get the line containing this match
+    const lineStart = text.lastIndexOf('\n', m.index) + 1;
+    const lineEnd = text.indexOf('\n', m.index);
+    const line = text.slice(lineStart, lineEnd >= 0 ? lineEnd : text.length);
+    // If the line starts with "You should spend" or contains "which are based on",
+    // this is a header mention — skip it
+    if (/^you should spend/i.test(line) || /which are based on/i.test(line)) continue;
+    // This is a real question section header
+    return m.index;
+  }
+  return text.length;
+}
+
+// ─── Main ───────────────────────────────────────────────────────────────────
 
 export function parseIELTSText(rawText) {
   const text = clean(rawText);
   const answerKey = extractAnswerKey(text);
   const hasAnswerKey = Object.keys(answerKey).length > 0;
 
-  const passageRe = /READING PASSAGE\s*(\d+)/gi;
-  const passageMatches = [...text.matchAll(passageRe)];
-  let passages = [];
-  let questionText = '';
+  // Split passage block from question block
+  const passageEnd = findPassageEnd(text);
+  const passageBlock = text.slice(0, passageEnd);
+  const questionBlock = text.slice(passageEnd);
 
+  // Find passage numbers within passage block
+  const passageRe = /READING PASSAGE\s*(\d+)/gi;
+  const passageMatches = [...passageBlock.matchAll(passageRe)];
+
+  let passages = [];
   if (passageMatches.length > 0) {
     for (let i = 0; i < passageMatches.length; i++) {
       const pm = passageMatches[i];
       const num = parseInt(pm[1]) || i + 1;
       const start = pm.index;
-      const nextStart = i + 1 < passageMatches.length ? passageMatches[i + 1].index : text.length;
-      const relQ = text.slice(start).search(/Questions?\s+\d{1,2}\s*[–\-—]/i);
-      const end = relQ > 0 ? start + relQ : nextStart;
-      passages.push(parsePassage(text.slice(start, end), num));
-      if (i === passageMatches.length - 1) questionText = text.slice(end);
+      const nextStart = i + 1 < passageMatches.length ? passageMatches[i + 1].index : passageBlock.length;
+      passages.push(parsePassage(passageBlock.slice(start, nextStart), num));
     }
   } else {
-    const qStart = text.search(/Questions?\s+\d{1,2}\s*[–\-—]/i);
-    if (qStart > 80) {
-      passages.push(parsePassage(text.slice(0, qStart), 1));
-      questionText = text.slice(qStart);
-    } else {
-      passages.push(parsePassage(text, 1));
-    }
+    passages.push(parsePassage(passageBlock, 1));
   }
 
-  const questionSets = parseQuestionSets(questionText || text, answerKey);
+  const questionSets = parseQuestionSets(questionBlock || text, answerKey);
   const totalQuestions = questionSets.reduce((s, qs) => s + qs.questions.length, 0);
   const hasQuestions = totalQuestions > 0;
 
